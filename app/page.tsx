@@ -11,6 +11,41 @@ import { Send, Bot, Sun, Moon, Mic, MicOff } from "lucide-react";
 import { ChatMessage } from "@/components/chat-message";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
+import { DetectedLocation } from "@/types/location";
+import { useCallback } from "react";
+
+export function useDebouncedCallback<T extends (...args: any[]) => void>(
+  callback: T,
+  delay: number
+) {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedFn = useCallback(
+    (...args: Parameters<T>) => {
+      // clear old timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      // set new timeout
+      timeoutRef.current = setTimeout(() => {
+        callback(...args);
+      }, delay);
+    },
+    [callback, delay]
+  );
+
+  // cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return debouncedFn;
+}
+
 
 interface Message {
   id: string;
@@ -18,6 +53,8 @@ interface Message {
   content: string;
   data?: any[];
   chart?: any;
+  locationInfo?: DetectedLocation;
+  locations?: DetectedLocation[];
   timestamp: Date;
 }
 
@@ -58,6 +95,7 @@ function MicVisualizer() {
   );
 }
 
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -69,6 +107,7 @@ export default function ChatPage() {
     process.env.NEXT_PUBLIC_API_URL || "https://neersetu.onrender.com"
   );
   const [mounted, setMounted] = useState(false);
+  const [detectedLocation, setDetectedLocation] = useState<DetectedLocation | null>(null);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -80,10 +119,17 @@ export default function ChatPage() {
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
-        "[data-radix-scroll-area-viewport]"
+        '[data-slot="scroll-area-viewport"]'
       );
       if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        // Use smooth scrolling when available to mimic chat apps
+        try {
+          // @ts-ignore
+          scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: "smooth" });
+        } catch (e) {
+          // fallback
+          scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        }
       }
     }
   };
@@ -100,7 +146,7 @@ export default function ChatPage() {
           setLatitude(pos.coords.latitude);
           setLongitude(pos.coords.longitude);
         },
-        () => {},
+        () => { },
         { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
       );
     }
@@ -113,6 +159,47 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Location detection function wrapped in useCallback
+  const detectLocation = useCallback(async (text: string) => {
+    if (!text.trim()) {
+      setDetectedLocation(null);
+      return;
+    }
+
+    try {
+      const detectResponse = await fetch("/api/detect-location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (detectResponse.ok) {
+        const detectData = await detectResponse.json();
+        if (detectData.location) {
+          setDetectedLocation(detectData.location);
+        } else {
+          setDetectedLocation(null);
+        }
+      }
+    } catch (e) {
+      // Only log errors in development
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Failed to detect location", e);
+      }
+      setDetectedLocation(null);
+    }
+  }, []);
+
+  // Create a debounced version of detectLocation - memoized to prevent recreation
+  const debouncedDetectLocation = useDebouncedCallback(detectLocation, 300);
+
+  // Handle input change - immediate update, debounced location detection
+  // Memoized to prevent recreation on every render
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setInput(newValue);              // update immediately
+    debouncedDetectLocation(newValue); // run detection 300ms after typing stops
+  }, [debouncedDetectLocation]);
 
   // Send message
   const sendMessage = async (messageText?: string) => {
@@ -149,12 +236,36 @@ export default function ChatPage() {
 
       const data: ApiResponse = await response.json();
 
+      // Detect location
+      let locationInfo: DetectedLocation | undefined;
+      let locations: DetectedLocation[] | undefined;
+      try {
+        const detectResponse = await fetch("/api/detect-location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: textToSend }),
+        });
+        if (detectResponse.ok) {
+          const detectData = await detectResponse.json();
+          if (detectData.location) {
+            locationInfo = detectData.location;
+          }
+          if (detectData.locations && Array.isArray(detectData.locations)) {
+            locations = detectData.locations;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to detect location", e);
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: data.response,
         data: data.data,
         chart: data.chart,
+        locationInfo,
+        locations,
         timestamp: new Date(),
       };
 
@@ -221,7 +332,7 @@ export default function ChatPage() {
         if (isListening) {
           try {
             recognition.start();
-          } catch {}
+          } catch { }
         } else {
           setIsListening(false);
         }
@@ -256,7 +367,7 @@ export default function ChatPage() {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
-    } catch {}
+    } catch { }
     setIsListening(false);
 
     // Auto-send when mic stops
@@ -272,7 +383,7 @@ export default function ChatPage() {
         if (recognitionRef.current) {
           recognitionRef.current.stop();
         }
-      } catch {}
+      } catch { }
     };
   }, []);
 
@@ -375,14 +486,26 @@ export default function ChatPage() {
           </ScrollArea>
         )}
 
-        {/* Input area */}
-        <div className="p-4 border-t">
+        {/* Input area - sticky to bottom so input stays visible on mobile */}
+        <div className="p-4 border-t sticky bottom-0 bg-background z-10">
           <div className="max-w-2xl mx-auto">
+            {detectedLocation && (
+              <div className="mb-2 text-xs text-muted-foreground flex items-center gap-1 px-1">
+                <span>📍</span>
+                <span>
+                  {detectedLocation.type === "country"
+                    ? detectedLocation.name
+                    : detectedLocation.type === "state"
+                      ? detectedLocation.name
+                      : `${detectedLocation.name}, ${detectedLocation.stateName}`}
+                </span>
+              </div>
+            )}
             <div className="relative flex items-center">
               <Input
                 placeholder="Send a message..."
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={handleInputChange}
                 onKeyPress={handleKeyPress}
                 disabled={isLoading}
                 className="pr-28 py-3 rounded-full border-border"
@@ -405,9 +528,8 @@ export default function ChatPage() {
                   }
                   disabled={isLoading}
                   size="icon"
-                  className={`w-8 h-8 rounded-full transition-colors ${
-                    isListening ? "bg-red-500 hover:bg-red-600 text-white" : ""
-                  }`}
+                  className={`w-8 h-8 rounded-full transition-colors ${isListening ? "bg-red-500 hover:bg-red-600 text-white" : ""
+                    }`}
                   aria-label={
                     isListening ? "Close mic & send" : "Start voice input"
                   }

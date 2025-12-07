@@ -1,0 +1,384 @@
+{
+  "info": {
+    "_postman_id": "b3b8f4f0-0000-4000-8000-0000neersetucoll",
+    "name": "NeerSetu API Collection",
+    "description": "Postman collection to test NeerSetu Next.js API routes and FastAPI groundwater backend with dummy data.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Next.js APIs (Frontend /app/api)",
+      "item": [
+        {
+          "name": "Detect Location - Dummy Text",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Show me groundwater data for Ahmedabad district in Gujarat\"\n}"
+            },
+            "url": {
+              "raw": "{{next_base_url}}/api/detect-location",
+              "host": [
+                "{{next_base_url}}"
+              ],
+              "path": [
+                "api",
+                "detect-location"
+              ]
+            },
+            "description": "Calls the Next.js `POST /api/detect-location` endpoint with dummy text mentioning an Indian city and state.\n\nExpected:\n- **200** with `{ location: { type, name, stateName? } }` if a state or district is detected\n- **400** with `{ location: null }` if `text` is missing or invalid"
+          },
+          "response": []
+        },
+        {
+          "name": "Detect Location - Invalid Body (400 test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"wrongField\": \"no text here\"\n}"
+            },
+            "url": {
+              "raw": "{{next_base_url}}/api/detect-location",
+              "host": [
+                "{{next_base_url}}"
+              ],
+              "path": [
+                "api",
+                "detect-location"
+              ]
+            },
+            "description": "Negative test for `POST /api/detect-location` with missing `text` field.\n\nExpected:\n- **400** with `{ location: null }`"
+          },
+          "response": []
+        },
+        {
+          "name": "GeoJSON - By State (Gujarat)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{next_base_url}}/api/geojson?state=Gujarat",
+              "host": [
+                "{{next_base_url}}"
+              ],
+              "path": [
+                "api",
+                "geojson"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "Gujarat"
+                }
+              ]
+            },
+            "description": "Calls the Next.js `GET /api/geojson` endpoint for state-level GeoJSON.\n\nDummy data uses `state=Gujarat`.\n\nWhen a state is requested, the API will also fetch and return district boundaries within that state.\n\nExpected:\n- **200** with `{ geoJson: {...}, districtsGeoJson?: {...}, error?: string }` when outline is found (either local file or remote)\n  - `geoJson`: State boundary GeoJSON\n  - `districtsGeoJson`: (Optional) District boundaries GeoJSON within the state, fetched from GitHub repository\n- **404** with `{ geoJson: null, error: \"Location outline not found\" }` when nothing is found"
+          },
+          "response": []
+        },
+        {
+          "name": "GeoJSON - By District (Ahmedabad)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{next_base_url}}/api/geojson?district=Ahmedabad",
+              "host": [
+                "{{next_base_url}}"
+              ],
+              "path": [
+                "api",
+                "geojson"
+              ],
+              "query": [
+                {
+                  "key": "district",
+                  "value": "Ahmedabad"
+                }
+              ]
+            },
+            "description": "Calls the Next.js `GET /api/geojson` endpoint for district-level GeoJSON.\n\nDummy data uses `district=Ahmedabad`.\n\nNote: District requests only return the district boundary. To see districts within a state, use the state parameter.\n\nExpected:\n- **200** with `{ geoJson: {...}, error?: string }` when district outline is found (either local file or remote)\n  - `geoJson`: District boundary GeoJSON\n  - `districtsGeoJson`: Not included for district-level requests\n- **404** with `{ geoJson: null, error: \"Location outline not found\" }` if not found"
+          },
+          "response": []
+        },
+        {
+          "name": "GeoJSON - Missing Params (400 test)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{next_base_url}}/api/geojson",
+              "host": [
+                "{{next_base_url}}"
+              ],
+              "path": [
+                "api",
+                "geojson"
+              ]
+            },
+            "description": "Negative test for `GET /api/geojson` with no `state` or `district` query parameter.\n\nExpected:\n- **400** with `{ geoJson: null, error: \"State or district name is required\" }`"
+          },
+          "response": []
+        },
+        {
+          "name": "GeoJSON - State with Districts (Maharashtra)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{next_base_url}}/api/geojson?state=Maharashtra",
+              "host": [
+                "{{next_base_url}}"
+              ],
+              "path": [
+                "api",
+                "geojson"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "Maharashtra"
+                }
+              ]
+            },
+            "description": "Calls the Next.js `GET /api/geojson` endpoint for state-level GeoJSON with district boundaries.\n\nThis request demonstrates the new feature where districts are automatically fetched and returned along with the state boundary.\n\nExpected:\n- **200** with `{ geoJson: {...}, districtsGeoJson: {...}, error?: string }`\n  - `geoJson`: Maharashtra state boundary GeoJSON\n  - `districtsGeoJson`: All district boundaries within Maharashtra, fetched from `https://raw.githubusercontent.com/guneetnarula/indian-district-boundaries/master/geojson/india_districts.geojson`\n  - Districts are filtered by state name and returned in the response\n- **404** with `{ geoJson: null, error: \"Location outline not found\" }` when state is not found"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "FastAPI Backend (backend_tisha)",
+      "item": [
+        {
+          "name": "Health - Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{backend_base_url}}/",
+              "host": [
+                "{{backend_base_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Simple health check for FastAPI backend.\n\nExpected:\n- **200** with `{ \"message\": \"INGRES Enhanced Groundwater Data Assistant API\", \"version\": \"2.0.0\" }`"
+          },
+          "response": []
+        },
+        {
+          "name": "Query - Simple Groundwater Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What is the average groundwater level in Gujarat?\"\n}"
+            },
+            "url": {
+              "raw": "{{backend_base_url}}/query",
+              "host": [
+                "{{backend_base_url}}"
+              ],
+              "path": [
+                "query"
+              ]
+            },
+            "description": "Calls `POST /query` with a simple groundwater-related question.\n\nBody fields:\n- **question**: required\n- **latitude**: optional (not provided here)\n- **longitude**: optional (not provided here)\n\nExpected:\n- **200** with `{ \"response\": \"...\" }` (SimpleResponse) for non-visualization queries"
+          },
+          "response": []
+        },
+        {
+          "name": "Query - Visualization Request (Category Distribution)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"show category distribution\"\n}"
+            },
+            "url": {
+              "raw": "{{backend_base_url}}/query",
+              "host": [
+                "{{backend_base_url}}"
+              ],
+              "path": [
+                "query"
+              ]
+            },
+            "description": "Calls `POST /query` with a question that forces category distribution visualization.\n\nExpected:\n- **200** with full `QueryResponse` including `chart` and `chart_type` (`pie`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Query - With Coordinates (Current Location style)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Show groundwater data near my current location\",\n  \"latitude\": 23.0225,\n  \"longitude\": 72.5714\n}"
+            },
+            "url": {
+              "raw": "{{backend_base_url}}/query",
+              "host": [
+                "{{backend_base_url}}"
+              ],
+              "path": [
+                "query"
+              ]
+            },
+            "description": "Calls `POST /query` simulating a 'near me' query with dummy coordinates (Ahmedabad).\n\nExpected:\n- **200** with a response using nearby data and possibly `location_info` in the result."
+          },
+          "response": []
+        },
+        {
+          "name": "Query - Empty Question (400 test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{backend_base_url}}/query",
+              "host": [
+                "{{backend_base_url}}"
+              ],
+              "path": [
+                "query"
+              ]
+            },
+            "description": "Negative test for `POST /query` with an empty question.\n\nExpected:\n- **400** with error `Question cannot be empty`."
+          },
+          "response": []
+        },
+        {
+          "name": "Location Data - Nearby Locations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 23.0225,\n  \"longitude\": 72.5714,\n  \"radius_km\": 50\n}"
+            },
+            "url": {
+              "raw": "{{backend_base_url}}/location-data",
+              "host": [
+                "{{backend_base_url}}"
+              ],
+              "path": [
+                "location-data"
+              ]
+            },
+            "description": "Calls `POST /location-data` to get groundwater records within a 50km radius of dummy coordinates (Ahmedabad).\n\nExpected:\n- **200** with `{ message, data: [...] }` if data exists.\n- **200** with `{ message: \"No data found within specified radius\", data: [] }` otherwise."
+          },
+          "response": []
+        },
+        {
+          "name": "Location Data - Missing Fields (400/500 behavior)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 23.0225\n}"
+            },
+            "url": {
+              "raw": "{{backend_base_url}}/location-data",
+              "host": [
+                "{{backend_base_url}}"
+              ],
+              "path": [
+                "location-data"
+              ]
+            },
+            "description": "Negative/edge test for `POST /location-data` with missing `longitude`.\n\nFastAPI's validation should return a **422 Unprocessable Entity** with details about missing fields."
+          },
+          "response": []
+        },
+        {
+          "name": "Debug Data - Dataset Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{backend_base_url}}/debug-data",
+              "host": [
+                "{{backend_base_url}}"
+              ],
+              "path": [
+                "debug-data"
+              ]
+            },
+            "description": "Calls `GET /debug-data` to inspect loaded groundwater dataset statistics.\n\nExpected:\n- **200** with total_rows, columns, sample_data, population_stats, etc.\n- or error if CSV not loaded."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "next_base_url",
+      "value": "http://localhost:3000",
+      "type": "string",
+      "description": "Base URL for Next.js frontend app (development)."
+    },
+    {
+      "key": "backend_base_url",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "Base URL for FastAPI groundwater backend (backend_tisha)."
+    }
+  ]
+}
+
+

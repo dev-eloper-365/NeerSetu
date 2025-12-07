@@ -16,6 +16,11 @@ const nextConfig = {
   compress: true,
   // Power by header for Vercel
   poweredByHeader: false,
+  experimental: {
+    serverActions: {
+      allowedOrigins: ["*"],
+    },
+  },
 }
 
 export default nextConfig

@@ -26,7 +26,7 @@ export default function RootLayout({
             {children}
           </ThemeProvider>
         </Suspense>
-        <Analytics />
+        <Analytics mode={process.env.NODE_ENV === 'production' ? 'production' : 'development'} />
       </body>
     </html>
   )
